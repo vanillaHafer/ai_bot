@@ -356,6 +356,7 @@ class MainWindow(QMainWindow):
             self.conversation_log_layout.insertWidget(self.conversation_log_layout.count() - 1, thinking_label)
             self.conversation_log_area.verticalScrollBar().setValue(self.conversation_log_area.verticalScrollBar().maximum())
 
+            self.ai_emoji_label.setText("🤔")
             self.pulse_emoji(self.ai_emoji_label, start=True)
 
             def get_ai_response():
@@ -397,6 +398,7 @@ class MainWindow(QMainWindow):
     def update_ai_response(self, response_text, thinking_label):
         thinking_label.setText(f"AI: {response_text}")
         self.pulse_emoji(self.ai_emoji_label, start=False)
+        self.ai_emoji_label.setText("🤖")
         QTimer.singleShot(50, lambda: (
             QApplication.processEvents(),
             self.conversation_log_area.ensureWidgetVisible(thinking_label)
