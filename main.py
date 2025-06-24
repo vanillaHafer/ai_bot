@@ -64,6 +64,7 @@ class MainWindow(QMainWindow):
         self.language = "English"
         self.setWindowTitle("My App")
         self.messages = []
+        self.selected_agent = "llama3.2"
 
         self.resize(1200, 600)
 
@@ -102,13 +103,19 @@ class MainWindow(QMainWindow):
         self.selected_device_index = self.microphone_devices[0][0] if self.microphone_devices else None
         self.microphoneComboBox.currentIndexChanged.connect(self.on_microphone_changed)
 
+        self.agentComboBox = QComboBox()
+        self.agentComboBox.setMinimumWidth(250)
+        self.agentComboBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.agentComboBox.addItem("llama3.2")
+        self.agentComboBox.addItem("deepseek-r1")
+        self.agentComboBox.currentIndexChanged.connect(self.on_agent_changed)
+
         self.button_group = QButtonGroup(self)
         self.button_group.setExclusive(True)
         self.button_group.addButton(self.englishButton)
         self.button_group.addButton(self.japaneseButton)
         self.button_group.addButton(self.portugueseButton)
 
-        # Language buttons row
         language_layout = QHBoxLayout()
         language_layout.addStretch()
         language_layout.addWidget(self.englishButton)
@@ -116,18 +123,21 @@ class MainWindow(QMainWindow):
         language_layout.addWidget(self.portugueseButton)
         language_layout.addStretch()
 
-        # Listen buttons row
         listen_layout = QHBoxLayout()
         listen_layout.addStretch()
         listen_layout.addWidget(self.listenButton)
         listen_layout.addWidget(self.stopListenButton)
         listen_layout.addStretch()
 
-        # Microphone selection row
         mic_layout = QHBoxLayout()
         mic_layout.addStretch()
         mic_layout.addWidget(self.microphoneComboBox)
         mic_layout.addStretch()
+
+        agent_layout = QHBoxLayout()
+        agent_layout.addStretch()
+        agent_layout.addWidget(self.agentComboBox)
+        agent_layout.addStretch()
 
         you_box = QFrame()
         you_box.setFrameShape(QFrame.StyledPanel)
@@ -196,6 +206,7 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(language_layout)
         main_layout.addLayout(listen_layout)
         main_layout.addLayout(mic_layout)
+        main_layout.addLayout(agent_layout)
         main_layout.addLayout(boxes_layout)
 
         central_widget = QWidget()
@@ -301,9 +312,7 @@ class MainWindow(QMainWindow):
     def start_listening(self):
         if self.language == "English":
             model_path = "Models/vosk-model-small-en-us-0.15"
-            # model_path = "Models/vosk-model-en-us-0.22"
         elif self.language == "Japanese":
-            # model_path = "Models/vosk-model-small-ja-0.22"
             model_path = "Models/vosk-model-ja-0.22"
         elif self.language == "Portuguese":
             model_path = "Models/vosk-model-small-pt-0.3"
@@ -316,6 +325,8 @@ class MainWindow(QMainWindow):
         self.englishButton.setEnabled(False)
         self.japaneseButton.setEnabled(False)
         self.portugueseButton.setEnabled(False)
+        self.microphoneComboBox.setEnabled(False)
+        self.agentComboBox.setEnabled(False)
         self.speech_thread = SpeechRecognitionThread(model_path, device_index)
         self.speech_thread.result_signal.connect(self.handle_speech_result)
         self.speech_thread.finished.connect(self.on_listen_finished)
@@ -340,7 +351,7 @@ class MainWindow(QMainWindow):
             self.stop_listening()
 
             thinking_label = QLabel("AI is thinking...")
-            thinking_label.setStyleSheet("color: #d70078; font-style: italic; margin: 6px 0;")
+            thinking_label.setStyleSheet("color: #d70078; margin: 6px 0;")
             thinking_label.setWordWrap(True)
             self.conversation_log_layout.insertWidget(self.conversation_log_layout.count() - 1, thinking_label)
             self.conversation_log_area.verticalScrollBar().setValue(self.conversation_log_area.verticalScrollBar().maximum())
@@ -348,7 +359,7 @@ class MainWindow(QMainWindow):
             self.pulse_emoji(self.ai_emoji_label, start=True)
 
             def get_ai_response():
-                response: ChatResponse = chat(model='llama3.2', messages=self.messages)
+                response: ChatResponse = chat(model=self.selected_agent, messages=self.messages)
                 self.messages.append({'role': 'assistant', 'content': response.message.content})
                 self.ai_response_signal.emit(response.message.content, thinking_label)
 
@@ -364,6 +375,8 @@ class MainWindow(QMainWindow):
         self.englishButton.setEnabled(True)
         self.japaneseButton.setEnabled(True)
         self.portugueseButton.setEnabled(True)
+        self.microphoneComboBox.setEnabled(True)
+        self.agentComboBox.setEnabled(True)
         self.pulse_emoji(self.you_emoji_label, start=False)
 
     def on_listen_finished(self):
@@ -372,6 +385,8 @@ class MainWindow(QMainWindow):
         self.englishButton.setEnabled(True)
         self.japaneseButton.setEnabled(True)
         self.portugueseButton.setEnabled(True)
+        self.microphoneComboBox.setEnabled(True)
+        self.agentComboBox.setEnabled(True)
 
     def closeEvent(self, event):
         if self.speech_thread and self.speech_thread.isRunning():
@@ -444,6 +459,9 @@ class MainWindow(QMainWindow):
 
     def on_microphone_changed(self, index):
         self.selected_device_index = self.microphoneComboBox.itemData(index)
+
+    def on_agent_changed(self, index):
+        self.selected_agent = self.agentComboBox.currentText()
 
 app = QApplication(sys.argv)
 window = MainWindow()
