@@ -7,7 +7,7 @@ This is just a proof of concept app that I made to test playing with 2 tools:
 
 ### Installation and Requirements
 
-You're going to need Python, a model for your language of choice provided by Vosk, and a local LLM provided by Ollama and portaudio.
+You're going to need Python, models for your chosen languages provided by [Vosk](https://alphacephei.com/vosk/), at least one local LLM provided by [Ollama](https://ollama.com/) and portaudio.
 
 > Downloaded voice recognition models should go into your Models folder.
 
@@ -24,13 +24,18 @@ brew install portaudio
 Now, we need to install some Python dependencies:
 
 ```sh
-pip3 install vosk pyaudio ollama
+pip3 install vosk pyaudio ollama PyQt5
 ```
 
-After you have Ollama set up, run this to download the LLM used on this app:
+After you have Ollama set up, run this to download the LLMs used on this app:
+(or just run the LLM(s) you plan on using and adjust the code accordingly)
 
 ```sh
 ollama run llama3.2
+```
+
+```sh
+ollama run deepseek-r1
 ```
 
 You should be good to go at this point.
@@ -43,22 +48,15 @@ To run this simply use the following command:
 python3 main.py
 ```
 
-> [!CAUTION]
-> You may find that it's not running, spitting out some issue about about the stream with this error
-> `OSError: [Errno -9998] Invalid number of channels`
->
-> Run `tool.py` (instructions at the bottom) to get your list of available input sources.
-> Use whatever input device id you want to use for `input_device_index` on `line 18` of `main.py`
+This will now open up a window allowing you to select your voice recognition language and AI agent language (Default English).
 
-It should now prompt you to go ahead and start talking to the AI.
+You can also select which microphone to use from the detected inputs.
 
-Once you are finished speaking it will show you what you said (green text preceded by 👤:)
-
-The AI will then respond in text (cyan text preceded by 🧠:)
+Once you are ready to speak to the AI agent, press "Start Listening" and then start talking into your microphone. The system will detect when the speaking stops and send it to the AI agent.
 
 #### Example
 
-<img width="885" alt="image" src="https://github.com/user-attachments/assets/0a827d42-7799-4b88-b722-8738c4799561" />
+<img width="1312" alt="image" src="https://github.com/user-attachments/assets/4b34091a-6548-412f-985d-0bbbf107ca8e" />
 
 ### Voice Commands
 
@@ -70,23 +68,3 @@ There are a few voice commands to perform different functions. Here is what is a
 
 - **reset**
   - This will reset the current session history with AI agent, essentially starting from scratch
-
-### Extras
-
-There is a tool.py script that will let you know what microphones exist, and what their ID is that you can use inside the app.
-
-To run this simply run:
-
-```sh
-python3 tool.py
-```
-
-and you should see some output like this:
-
-```
-Input Device id 2: Some Microphone
-Input Device id 3: Some Microphone
-Input Device id 6: Some Microphone
-Input Device id 8: Some Microphone
-Input Device id 9: Some Microphone
-```
