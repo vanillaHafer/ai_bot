@@ -2,7 +2,7 @@ import pyaudio
 import sys
 import json
 from vosk import Model, KaldiRecognizer
-from ollama import chat
+from ollama import chat, list as ollama_list
 from ollama import ChatResponse
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QWidget, QHBoxLayout, QVBoxLayout,
@@ -106,8 +106,7 @@ class MainWindow(QMainWindow):
         self.agentComboBox = QComboBox()
         self.agentComboBox.setMinimumWidth(250)
         self.agentComboBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.agentComboBox.addItem("llama3.2")
-        self.agentComboBox.addItem("deepseek-r1")
+        self.enumerate_ollama_models()
         self.agentComboBox.currentIndexChanged.connect(self.on_agent_changed)
 
         self.button_group = QButtonGroup(self)
@@ -464,6 +463,23 @@ class MainWindow(QMainWindow):
 
     def on_agent_changed(self, index):
         self.selected_agent = self.agentComboBox.currentText()
+
+    def enumerate_ollama_models(self):
+        try:
+            models = ollama_list()
+            if models and hasattr(models, 'models'):
+                for model in models.models:
+                    model_name = model.model
+                    if model_name.endswith(':latest'):
+                        model_name = model_name[:-7]
+                    self.agentComboBox.addItem(model_name)
+                if models.models:
+                    first_model = models.models[0].model
+                    if first_model.endswith(':latest'):
+                        first_model = first_model[:-7]
+                    self.selected_agent = first_model
+        except Exception as e:
+            print(f"Error enumerating Ollama models: {e}")
 
 app = QApplication(sys.argv)
 window = MainWindow()
