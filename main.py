@@ -2,6 +2,7 @@ import pyaudio
 import sys
 import json
 import os
+import pyttsx3
 from vosk import Model, KaldiRecognizer
 from ollama import chat, list as ollama_list
 from ollama import ChatResponse
@@ -56,6 +57,40 @@ class SpeechRecognitionThread(QThread):
     def stop(self):
         self._running = False
 
+class TextToSpeechThread(QThread):
+    tts_done = pyqtSignal()
+
+    def __init__(self, text, language="English"):
+        super().__init__()
+        self.text = text
+        self.language = language
+
+    def run(self):
+        try:
+            engine = pyttsx3.init()
+            if self.language == "Japanese":
+                voices = engine.getProperty('voices')
+                for voice in voices:
+                    if 'japanese' in voice.name.lower() or 'ja' in voice.id.lower():
+                        engine.setProperty('voice', voice.id)
+                        break
+                engine.setProperty('rate', 150)
+            elif self.language == "Portuguese":
+                voices = engine.getProperty('voices')
+                for voice in voices:
+                    if 'portuguese' in voice.name.lower() or 'pt' in voice.id.lower():
+                        engine.setProperty('voice', voice.id)
+                        break
+                engine.setProperty('rate', 160)
+            else:
+                engine.setProperty('rate', 175)
+            engine.setProperty('volume', 0.8)
+            engine.say(self.text)
+            engine.runAndWait()
+            engine.stop()
+        finally:
+            self.tts_done.emit()
+
 class MainWindow(QMainWindow):
     ai_response_signal = pyqtSignal(str, object)
 
@@ -66,6 +101,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("My App")
         self.messages = []
         self.selected_agent = "llama3.2"
+        self.tts_enabled = False
 
         self.resize(1200, 600)
 
@@ -94,15 +130,22 @@ class MainWindow(QMainWindow):
         self.language_buttons = {}
         self.create_language_buttons()
 
-        self.listenButton = QPushButton("Start Listening")
+        self.listenButton = QPushButton("Start Speaking")
         self.listenButton.setObjectName("startListenButton")
         self.listenButton.clicked.connect(self.start_listening)
-        self.stopListenButton = QPushButton("Stop Listening")
+        self.stopListenButton = QPushButton("Stop Speaking")
         self.stopListenButton.setObjectName("stopListenButton")
         self.stopListenButton.setEnabled(False)
         self.stopListenButton.clicked.connect(self.stop_listening)
         self.listenButton.setCursor(QCursor(Qt.PointingHandCursor))
         self.stopListenButton.setCursor(QCursor(Qt.PointingHandCursor))
+
+        self.ttsButton = QPushButton("🔇 TTS: OFF")
+        self.ttsButton.setObjectName("ttsButton")
+        self.ttsButton.setCheckable(True)
+        self.ttsButton.setChecked(False)
+        self.ttsButton.clicked.connect(self.toggle_tts)
+        self.ttsButton.setCursor(QCursor(Qt.PointingHandCursor))
 
         self.microphoneComboBox = QComboBox()
         self.microphoneComboBox.setMinimumWidth(250)
@@ -136,6 +179,7 @@ class MainWindow(QMainWindow):
         listen_layout.addStretch()
         listen_layout.addWidget(self.listenButton)
         listen_layout.addWidget(self.stopListenButton)
+        listen_layout.addWidget(self.ttsButton)
         listen_layout.addStretch()
 
         mic_layout = QHBoxLayout()
@@ -260,6 +304,11 @@ class MainWindow(QMainWindow):
                 border: 2px solid #d70000;
                 background-color: #c0c0c0;
             }
+            #ttsButton:disabled {
+                background-color: #666666;
+                border: 2px solid #666666;
+                color: #999999;
+            }
             #youBox {
                 background: #f5faff;
                 border: 2px solid #0078d7;
@@ -281,10 +330,10 @@ class MainWindow(QMainWindow):
         """)
 
         self.speech_thread = None
+        self.tts_thread = None
         self.ai_response_signal.connect(self.update_ai_response)
 
     def scan_vosk_models(self):
-        """Scan the Models folder for available Vosk models"""
         available_models = {}
         models_dir = "Models"
         
@@ -302,7 +351,6 @@ class MainWindow(QMainWindow):
         return available_models
 
     def create_language_buttons(self):
-        """Dynamically create language buttons based on available models in priority order"""
         language_emojis = {
             "English": "🇺🇸",
             "Japanese": "🇯🇵", 
@@ -373,6 +421,7 @@ class MainWindow(QMainWindow):
             
         self.microphoneComboBox.setEnabled(False)
         self.agentComboBox.setEnabled(False)
+        self.ttsButton.setEnabled(False)
         
         self.speech_thread = SpeechRecognitionThread(model_path, device_index)
         self.speech_thread.result_signal.connect(self.handle_speech_result)
@@ -396,15 +445,12 @@ class MainWindow(QMainWindow):
             self.add_message_to_log(text, sender="user")
             self.messages.append({'role': 'user', 'content': text})
             
-            # Stop listening but don't re-enable buttons yet
             if self.speech_thread and self.speech_thread.isRunning():
-                # Disconnect the finished signal to prevent on_listen_finished from being called
                 self.speech_thread.finished.disconnect()
                 self.speech_thread.stop()
                 self.speech_thread.wait()
             self.pulse_emoji(self.you_emoji_label, start=False)
 
-            # Disable the Stop Listening button while AI is thinking
             self.stopListenButton.setEnabled(False)
 
             thinking_label = QLabel("AI is thinking...")
@@ -436,6 +482,7 @@ class MainWindow(QMainWindow):
             
         self.microphoneComboBox.setEnabled(True)
         self.agentComboBox.setEnabled(True)
+        self.ttsButton.setEnabled(True)
         self.pulse_emoji(self.you_emoji_label, start=False)
 
     def on_listen_finished(self):
@@ -447,6 +494,7 @@ class MainWindow(QMainWindow):
             
         self.microphoneComboBox.setEnabled(True)
         self.agentComboBox.setEnabled(True)
+        self.ttsButton.setEnabled(True)
 
     def closeEvent(self, event):
         if self.speech_thread and self.speech_thread.isRunning():
@@ -458,8 +506,7 @@ class MainWindow(QMainWindow):
         thinking_label.setText(f"AI: {response_text}")
         self.pulse_emoji(self.ai_emoji_label, start=False)
         self.ai_emoji_label.setText("🤖")
-        
-        # Re-enable all buttons after AI responds
+        self.speak_text(response_text)
         self.listenButton.setEnabled(True)
         self.stopListenButton.setEnabled(False)
         
@@ -468,6 +515,7 @@ class MainWindow(QMainWindow):
             
         self.microphoneComboBox.setEnabled(True)
         self.agentComboBox.setEnabled(True)
+        self.ttsButton.setEnabled(True)
         
         QTimer.singleShot(50, lambda: (
             QApplication.processEvents(),
@@ -573,6 +621,40 @@ class MainWindow(QMainWindow):
                 "Download Ollama from: https://ollama.com/download"
             )
             sys.exit(1)
+
+    def toggle_tts(self):
+        self.tts_enabled = self.ttsButton.isChecked()
+        if self.tts_enabled:
+            self.ttsButton.setText("🔊 TTS: ON")
+        else:
+            self.ttsButton.setText("🔇 TTS: OFF")
+
+    def speak_text(self, text):
+        if self.tts_enabled and text:
+            try:
+                engine = pyttsx3.init()
+                if self.language == "Japanese":
+                    voices = engine.getProperty('voices')
+                    for voice in voices:
+                        if 'japanese' in voice.name.lower() or 'ja' in voice.id.lower():
+                            engine.setProperty('voice', voice.id)
+                            break
+                    engine.setProperty('rate', 150)
+                elif self.language == "Portuguese":
+                    voices = engine.getProperty('voices')
+                    for voice in voices:
+                        if 'portuguese' in voice.name.lower() or 'pt' in voice.id.lower():
+                            engine.setProperty('voice', voice.id)
+                            break
+                    engine.setProperty('rate', 160)
+                else:
+                    engine.setProperty('rate', 175)
+                engine.setProperty('volume', 0.8)
+                engine.say(text)
+                engine.runAndWait()
+                engine.stop()
+            except Exception as e:
+                print(f"TTS Error (main thread): {e}")
 
 app = QApplication(sys.argv)
 window = MainWindow()

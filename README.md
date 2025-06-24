@@ -32,7 +32,7 @@ brew install portaudio
 Now, we need to install some Python dependencies:
 
 ```sh
-pip3 install vosk pyaudio ollama PyQt5
+pip3 install vosk pyaudio ollama PyQt5 pyttsx3
 ```
 
 After you have Ollama set up, run this to download [any additional LLMs](https://ollama.com/library) you want to use:
