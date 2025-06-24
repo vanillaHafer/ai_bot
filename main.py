@@ -1,6 +1,7 @@
 import pyaudio
 import sys
 import json
+import os
 from vosk import Model, KaldiRecognizer
 from ollama import chat, list as ollama_list
 from ollama import ChatResponse
@@ -68,21 +69,30 @@ class MainWindow(QMainWindow):
 
         self.resize(1200, 600)
 
-        self.englishButton = QPushButton("English")
-        self.englishButton.setCheckable(True)
-        self.englishButton.setChecked(True)
-        self.englishButton.clicked.connect(self.english_button_was_clicked)
-        self.englishButton.setCursor(QCursor(Qt.PointingHandCursor))
-
-        self.japaneseButton = QPushButton("Japanese")
-        self.japaneseButton.setCheckable(True)
-        self.japaneseButton.clicked.connect(self.japanese_button_was_clicked)
-        self.japaneseButton.setCursor(QCursor(Qt.PointingHandCursor))
-
-        self.portugueseButton = QPushButton("Portuguese")
-        self.portugueseButton.setCheckable(True)
-        self.portugueseButton.clicked.connect(self.portuguese_button_was_clicked)
-        self.portugueseButton.setCursor(QCursor(Qt.PointingHandCursor))
+        self.supported_languages = {
+            "English": "vosk-model-small-en-us-0.15",
+            "Japanese": "vosk-model-ja-0.22", 
+            "Portuguese": "vosk-model-small-pt-0.3"
+        }
+        
+        self.available_models = self.scan_vosk_models()
+        
+        if not self.available_models:
+            QMessageBox.critical(
+                self, 
+                "No Language Models Found", 
+                "No compatible language models were found in the /Models directory.\n\n"
+                "Please download one of the supported language models from Vosk's website:\n"
+                "https://alphacephei.com/vosk/models\n\n"
+                "Supported models:\n"
+                "• English: vosk-model-small-en-us-0.15\n"
+                "• Japanese: vosk-model-ja-0.22\n"
+                "• Portuguese: vosk-model-small-pt-0.3"
+            )
+            sys.exit(1)
+        
+        self.language_buttons = {}
+        self.create_language_buttons()
 
         self.listenButton = QPushButton("Start Listening")
         self.listenButton.setObjectName("startListenButton")
@@ -111,15 +121,15 @@ class MainWindow(QMainWindow):
 
         self.button_group = QButtonGroup(self)
         self.button_group.setExclusive(True)
-        self.button_group.addButton(self.englishButton)
-        self.button_group.addButton(self.japaneseButton)
-        self.button_group.addButton(self.portugueseButton)
+        
+        for language in self.supported_languages.keys():
+            if language in self.language_buttons:
+                self.button_group.addButton(self.language_buttons[language])
 
         language_layout = QHBoxLayout()
         language_layout.addStretch()
-        language_layout.addWidget(self.englishButton)
-        language_layout.addWidget(self.japaneseButton)
-        language_layout.addWidget(self.portugueseButton)
+        for button in self.language_buttons.values():
+            language_layout.addWidget(button)
         language_layout.addStretch()
 
         listen_layout = QHBoxLayout()
@@ -273,20 +283,60 @@ class MainWindow(QMainWindow):
         self.speech_thread = None
         self.ai_response_signal.connect(self.update_ai_response)
 
-    def english_button_was_clicked(self):
-        self.language = "English"
-        self.set_language_system_message()
-        self.add_message_to_log("🇺🇸 Language set to English", sender="system")
+    def scan_vosk_models(self):
+        """Scan the Models folder for available Vosk models"""
+        available_models = {}
+        models_dir = "Models"
+        
+        if not os.path.exists(models_dir):
+            return available_models
+            
+        for item in os.listdir(models_dir):
+            item_path = os.path.join(models_dir, item)
+            if os.path.isdir(item_path):
+                for language, pattern in self.supported_languages.items():
+                    if pattern in item:
+                        available_models[language] = item_path
+                        break
+        
+        return available_models
 
-    def japanese_button_was_clicked(self):
-        self.language = "Japanese"
-        self.set_language_system_message()
-        self.add_message_to_log("🇯🇵 Language set to Japanese", sender="system")
+    def create_language_buttons(self):
+        """Dynamically create language buttons based on available models in priority order"""
+        language_emojis = {
+            "English": "🇺🇸",
+            "Japanese": "🇯🇵", 
+            "Portuguese": "🇧🇷"
+        }
+        
+        for language in self.supported_languages.keys():
+            if language in self.available_models:
+                button = QPushButton(f"{language}")
+                button.setCheckable(True)
+                button.setCursor(QCursor(Qt.PointingHandCursor))
+                
+                if language == "English":
+                    button.setChecked(True)
+                elif not self.available_models.get("English") and len(self.language_buttons) == 0:
+                    button.setChecked(True)
+                    self.language = language
+                
+                button.clicked.connect(lambda checked, lang=language: self.language_button_was_clicked(lang))
+                
+                self.language_buttons[language] = button
 
-    def portuguese_button_was_clicked(self):
-        self.language = "Portuguese"
+    def language_button_was_clicked(self, language):
+        self.language = language
         self.set_language_system_message()
-        self.add_message_to_log("🇧🇷 Language set to Portuguese", sender="system")
+        
+        language_emojis = {
+            "English": "🇺🇸",
+            "Japanese": "🇯🇵", 
+            "Portuguese": "🇧🇷"
+        }
+        
+        emoji = language_emojis.get(language, "")
+        self.add_message_to_log(f"{emoji} Language set to {language}", sender="system")
 
     def add_message_to_log(self, text, sender="user"):
         if sender == "user":
@@ -309,23 +359,21 @@ class MainWindow(QMainWindow):
         ))
 
     def start_listening(self):
-        if self.language == "English":
-            model_path = "Models/vosk-model-small-en-us-0.15"
-        elif self.language == "Japanese":
-            model_path = "Models/vosk-model-ja-0.22"
-        elif self.language == "Portuguese":
-            model_path = "Models/vosk-model-small-pt-0.3"
+        if self.language in self.available_models:
+            model_path = self.available_models[self.language]
         else:
-            model_path = "Models/vosk-model-small-en-us-0.15"
+            model_path = list(self.available_models.values())[0]
 
         device_index = self.selected_device_index
         self.listenButton.setEnabled(False)
         self.stopListenButton.setEnabled(True)
-        self.englishButton.setEnabled(False)
-        self.japaneseButton.setEnabled(False)
-        self.portugueseButton.setEnabled(False)
+        
+        for button in self.language_buttons.values():
+            button.setEnabled(False)
+            
         self.microphoneComboBox.setEnabled(False)
         self.agentComboBox.setEnabled(False)
+        
         self.speech_thread = SpeechRecognitionThread(model_path, device_index)
         self.speech_thread.result_signal.connect(self.handle_speech_result)
         self.speech_thread.finished.connect(self.on_listen_finished)
@@ -372,9 +420,10 @@ class MainWindow(QMainWindow):
             self.speech_thread.wait()
         self.listenButton.setEnabled(True)
         self.stopListenButton.setEnabled(False)
-        self.englishButton.setEnabled(True)
-        self.japaneseButton.setEnabled(True)
-        self.portugueseButton.setEnabled(True)
+        
+        for button in self.language_buttons.values():
+            button.setEnabled(True)
+            
         self.microphoneComboBox.setEnabled(True)
         self.agentComboBox.setEnabled(True)
         self.pulse_emoji(self.you_emoji_label, start=False)
@@ -382,9 +431,10 @@ class MainWindow(QMainWindow):
     def on_listen_finished(self):
         self.listenButton.setEnabled(True)
         self.stopListenButton.setEnabled(False)
-        self.englishButton.setEnabled(True)
-        self.japaneseButton.setEnabled(True)
-        self.portugueseButton.setEnabled(True)
+        
+        for button in self.language_buttons.values():
+            button.setEnabled(True)
+            
         self.microphoneComboBox.setEnabled(True)
         self.agentComboBox.setEnabled(True)
 
@@ -467,19 +517,41 @@ class MainWindow(QMainWindow):
     def enumerate_ollama_models(self):
         try:
             models = ollama_list()
-            if models and hasattr(models, 'models'):
+            if models and hasattr(models, 'models') and models.models:
                 for model in models.models:
                     model_name = model.model
                     if model_name.endswith(':latest'):
                         model_name = model_name[:-7]
                     self.agentComboBox.addItem(model_name)
-                if models.models:
-                    first_model = models.models[0].model
-                    if first_model.endswith(':latest'):
-                        first_model = first_model[:-7]
-                    self.selected_agent = first_model
+                
+                first_model = models.models[0].model
+                if first_model.endswith(':latest'):
+                    first_model = first_model[:-7]
+                self.selected_agent = first_model
+            else:
+                QMessageBox.critical(
+                    self, 
+                    "No AI Models Found", 
+                    "No Ollama language models were detected.\n\n"
+                    "Please install at least one language model using Ollama:\n"
+                    "• Download Ollama from: https://ollama.com/download\n"
+                    "• Install a model: ollama run llama3.2\n"
+                    "• Or try other models: ollama run mistral, ollama run codellama, etc.\n\n"
+                    "For more models, visit: https://ollama.com/library"
+                )
+                sys.exit(1)
         except Exception as e:
-            print(f"Error enumerating Ollama models: {e}")
+            QMessageBox.critical(
+                self, 
+                "Ollama Connection Error", 
+                f"Failed to connect to Ollama: {str(e)}\n\n"
+                "Please ensure:\n"
+                "• Ollama is installed and running\n"
+                "• You can run 'ollama list' in terminal\n"
+                "• At least one model is installed\n\n"
+                "Download Ollama from: https://ollama.com/download"
+            )
+            sys.exit(1)
 
 app = QApplication(sys.argv)
 window = MainWindow()
