@@ -395,7 +395,17 @@ class MainWindow(QMainWindow):
         if text:
             self.add_message_to_log(text, sender="user")
             self.messages.append({'role': 'user', 'content': text})
-            self.stop_listening()
+            
+            # Stop listening but don't re-enable buttons yet
+            if self.speech_thread and self.speech_thread.isRunning():
+                # Disconnect the finished signal to prevent on_listen_finished from being called
+                self.speech_thread.finished.disconnect()
+                self.speech_thread.stop()
+                self.speech_thread.wait()
+            self.pulse_emoji(self.you_emoji_label, start=False)
+
+            # Disable the Stop Listening button while AI is thinking
+            self.stopListenButton.setEnabled(False)
 
             thinking_label = QLabel("AI is thinking...")
             thinking_label.setStyleSheet("color: #d70078; margin: 6px 0;")
@@ -448,6 +458,17 @@ class MainWindow(QMainWindow):
         thinking_label.setText(f"AI: {response_text}")
         self.pulse_emoji(self.ai_emoji_label, start=False)
         self.ai_emoji_label.setText("🤖")
+        
+        # Re-enable all buttons after AI responds
+        self.listenButton.setEnabled(True)
+        self.stopListenButton.setEnabled(False)
+        
+        for button in self.language_buttons.values():
+            button.setEnabled(True)
+            
+        self.microphoneComboBox.setEnabled(True)
+        self.agentComboBox.setEnabled(True)
+        
         QTimer.singleShot(50, lambda: (
             QApplication.processEvents(),
             self.conversation_log_area.ensureWidgetVisible(thinking_label)
