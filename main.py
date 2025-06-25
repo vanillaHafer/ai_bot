@@ -8,7 +8,8 @@ from ollama import chat, list as ollama_list
 from ollama import ChatResponse
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QWidget, QHBoxLayout, QVBoxLayout,
-    QButtonGroup, QLabel, QFrame, QScrollArea, QMessageBox, QSizePolicy, QComboBox
+    QButtonGroup, QLabel, QFrame, QScrollArea, QMessageBox, QSizePolicy, QComboBox,
+    QLineEdit
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QCursor
@@ -233,6 +234,55 @@ class MainWindow(QMainWindow):
         self.conversation_log_layout.addStretch()
         self.conversation_log_widget.setLayout(self.conversation_log_layout)
 
+        # Create text input bar and send button
+        self.text_input_layout = QHBoxLayout()
+        self.text_input = QLineEdit()
+        self.text_input.setPlaceholderText("Type your message here...")
+        self.text_input.setStyleSheet("""
+            QLineEdit {
+                border: 2px solid #cccccc;
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-size: 14px;
+                background: white;
+            }
+            QLineEdit:focus {
+                border: 2px solid #0078d7;
+            }
+        """)
+        self.text_input.returnPressed.connect(self.send_text_message)
+        
+        self.send_button = QPushButton("Send")
+        self.send_button.setObjectName("sendButton")
+        self.send_button.setCursor(QCursor(Qt.PointingHandCursor))
+        self.send_button.clicked.connect(self.send_text_message)
+        self.send_button.setStyleSheet("""
+            #sendButton {
+                background-color: #0078d7;
+                color: white;
+                border: 2px solid #0078d7;
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-weight: bold;
+                min-width: 60px;
+            }
+            #sendButton:hover {
+                background-color: #005a9e;
+                border: 2px solid #005a9e;
+            }
+            #sendButton:disabled {
+                background-color: #cccccc;
+                border: 2px solid #cccccc;
+                color: #666666;
+            }
+        """)
+        
+        self.text_input_layout.addWidget(self.text_input, stretch=1)
+        self.text_input_layout.addWidget(self.send_button)
+        
+        # Add text input to conversation log widget
+        self.conversation_log_layout.addLayout(self.text_input_layout)
+
         self.conversation_log_area = QScrollArea()
         self.conversation_log_area.setWidgetResizable(True)
         self.conversation_log_area.setWidget(self.conversation_log_widget)
@@ -423,6 +473,10 @@ class MainWindow(QMainWindow):
         self.agentComboBox.setEnabled(False)
         self.ttsButton.setEnabled(False)
         
+        # Disable text input controls
+        self.text_input.setEnabled(False)
+        self.send_button.setEnabled(False)
+        
         self.speech_thread = SpeechRecognitionThread(model_path, device_index)
         self.speech_thread.result_signal.connect(self.handle_speech_result)
         self.speech_thread.finished.connect(self.on_listen_finished)
@@ -483,6 +537,11 @@ class MainWindow(QMainWindow):
         self.microphoneComboBox.setEnabled(True)
         self.agentComboBox.setEnabled(True)
         self.ttsButton.setEnabled(True)
+        
+        # Re-enable text input controls
+        self.text_input.setEnabled(True)
+        self.send_button.setEnabled(True)
+        
         self.pulse_emoji(self.you_emoji_label, start=False)
 
     def on_listen_finished(self):
@@ -495,6 +554,10 @@ class MainWindow(QMainWindow):
         self.microphoneComboBox.setEnabled(True)
         self.agentComboBox.setEnabled(True)
         self.ttsButton.setEnabled(True)
+        
+        # Re-enable text input controls
+        self.text_input.setEnabled(True)
+        self.send_button.setEnabled(True)
 
     def closeEvent(self, event):
         if self.speech_thread and self.speech_thread.isRunning():
@@ -507,8 +570,12 @@ class MainWindow(QMainWindow):
         self.pulse_emoji(self.ai_emoji_label, start=False)
         self.ai_emoji_label.setText("🤖")
         self.speak_text(response_text)
+        
+        # Re-enable all controls
         self.listenButton.setEnabled(True)
         self.stopListenButton.setEnabled(False)
+        self.text_input.setEnabled(True)
+        self.send_button.setEnabled(True)
         
         for button in self.language_buttons.values():
             button.setEnabled(True)
@@ -655,6 +722,44 @@ class MainWindow(QMainWindow):
                 engine.stop()
             except Exception as e:
                 print(f"TTS Error (main thread): {e}")
+
+    def send_text_message(self):
+        text = self.text_input.text().strip()
+        if text:
+            self.add_message_to_log(text, sender="user")
+            self.messages.append({'role': 'user', 'content': text})
+            self.text_input.clear()
+            
+            # Disable input controls while waiting for response
+            self.text_input.setEnabled(False)
+            self.send_button.setEnabled(False)
+            self.listenButton.setEnabled(False)
+            self.stopListenButton.setEnabled(False)
+            
+            for button in self.language_buttons.values():
+                button.setEnabled(False)
+                
+            self.microphoneComboBox.setEnabled(False)
+            self.agentComboBox.setEnabled(False)
+            self.ttsButton.setEnabled(False)
+            
+            thinking_label = QLabel("AI is thinking...")
+            thinking_label.setStyleSheet("color: #d70078; margin: 6px 0;")
+            thinking_label.setWordWrap(True)
+            # Insert thinking label at the end (before the text input layout)
+            self.conversation_log_layout.insertWidget(self.conversation_log_layout.count() - 1, thinking_label)
+            self.conversation_log_area.verticalScrollBar().setValue(self.conversation_log_area.verticalScrollBar().maximum())
+
+            self.ai_emoji_label.setText("🤔")
+            self.pulse_emoji(self.ai_emoji_label, start=True)
+
+            def get_ai_response():
+                response: ChatResponse = chat(model=self.selected_agent, messages=self.messages)
+                self.messages.append({'role': 'assistant', 'content': response.message.content})
+                self.ai_response_signal.emit(response.message.content, thinking_label)
+
+            from threading import Thread
+            Thread(target=get_ai_response).start()
 
 app = QApplication(sys.argv)
 window = MainWindow()
