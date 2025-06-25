@@ -1,9 +1,19 @@
 ### Description
 
-This is just a proof of concept app that I made to test playing with 2 tools:
+This is just a proof of concept app that I made to test playing with a few tools:
 
 - [Vosk](https://alphacephei.com/vosk/) voice recognition tool
 - [Ollama](https://ollama.com/) local AI agents
+- [pyttsx3](https://github.com/nateshmbhat/pyttsx3) text-to-speech library
+
+It is an interface that plugs in with AI agents already on your system installed through Ollama. To communicate with the agent You can use different voice recognition models from Vosk as well as typing to the agent directly.
+
+This app features dynamically switching between languages and models mid conversation.
+
+Current Supported languages:
+🇺🇸 English
+🇯🇵 Japanese
+🇧🇷 Portuguese/Brazillian Portuguese
 
 ### Installation and Requirements
 
@@ -81,3 +91,14 @@ There are a few voice commands to perform different functions. Here is what is a
 
 - **reset**
   - This will reset the current session history with AI agent, essentially starting from scratch
+
+### Extras
+
+There are some keyboard shortcuts in case you need to type to the AI agent, despite this being a speech-first application.
+
+- **`CTRL+K`** _or_ **`CMD+K`**
+
+  - Toggles the visibility of the keyboard input field
+
+- **`/`**
+  - Moves focus to the keyboard input field so you can begin typing
