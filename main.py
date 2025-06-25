@@ -9,10 +9,10 @@ from ollama import ChatResponse
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QWidget, QHBoxLayout, QVBoxLayout,
     QButtonGroup, QLabel, QFrame, QScrollArea, QMessageBox, QSizePolicy, QComboBox,
-    QLineEdit
+    QLineEdit, QShortcut
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt5.QtGui import QCursor
+from PyQt5.QtGui import QCursor, QKeySequence
 
 class SpeechRecognitionThread(QThread):
     result_signal = pyqtSignal(str)
@@ -252,6 +252,14 @@ class MainWindow(QMainWindow):
         """)
         self.text_input.returnPressed.connect(self.send_text_message)
         
+        # Add keyboard shortcut for "/" key to focus text input
+        self.focus_shortcut = QShortcut(QKeySequence("/"), self)
+        self.focus_shortcut.activated.connect(self.focus_text_input)
+        
+        # Add keyboard shortcut for toggling input visibility (Ctrl+K)
+        self.toggle_input_shortcut = QShortcut(QKeySequence("Ctrl+K"), self)
+        self.toggle_input_shortcut.activated.connect(self.toggle_text_input_visibility)
+        
         self.send_button = QPushButton("Send")
         self.send_button.setObjectName("sendButton")
         self.send_button.setCursor(QCursor(Qt.PointingHandCursor))
@@ -279,6 +287,10 @@ class MainWindow(QMainWindow):
         
         self.text_input_layout.addWidget(self.text_input, stretch=1)
         self.text_input_layout.addWidget(self.send_button)
+        
+        # Hide text input and send button by default
+        self.text_input.setVisible(False)
+        self.send_button.setVisible(False)
         
         # Add text input to conversation log widget
         self.conversation_log_layout.addLayout(self.text_input_layout)
@@ -723,9 +735,33 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 print(f"TTS Error (main thread): {e}")
 
+    def focus_text_input(self):
+        """Focus the text input when "/" key is pressed"""
+        self.text_input.setFocus()
+        self.text_input.selectAll()
+
+    def toggle_text_input_visibility(self):
+        """Toggle the visibility of the text input and send button."""
+        is_visible = self.text_input.isVisible()
+        self.text_input.setVisible(not is_visible)
+        self.send_button.setVisible(not is_visible)
+
     def send_text_message(self):
         text = self.text_input.text().strip()
         if text:
+            # Handle special commands first
+            if text.lower() == "quit":
+                QMessageBox.information(self, "Quit", "I am now quitting the application! Thank you!")
+                QApplication.quit()
+                return
+
+            if text.lower() == "reset":
+                self.add_message_to_log("🔄 Conversation reset.", sender="system")
+                self.messages = []
+                self.text_input.clear()
+                return
+
+            # Normal message handling
             self.add_message_to_log(text, sender="user")
             self.messages.append({'role': 'user', 'content': text})
             self.text_input.clear()
